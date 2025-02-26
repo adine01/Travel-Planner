@@ -40,9 +40,18 @@ pipeline {
                         script {
                             if (params.INFRASTRUCTURE_ACTION == 'destroy') {
                                 sh '''
+                                    # Clean up RDS instances first
+                                    echo "Checking for RDS instances..."
+                                    RDS_INSTANCES=$(aws rds describe-db-instances --query 'DBInstances[?DBInstanceIdentifier==`wanderwise-db`].DBInstanceIdentifier' --output text)
+                                    if [ ! -z "$RDS_INSTANCES" ]; then
+                                        echo "Deleting RDS instance: $RDS_INSTANCES"
+                                        aws rds delete-db-instance --db-instance-identifier wanderwise-db --skip-final-snapshot --delete-automated-backups
+                                        echo "Waiting for RDS instance to be deleted..."
+                                        aws rds wait db-instance-deleted --db-instance-identifier wanderwise-db
+                                    fi
+
                                     # Clean up DB subnet groups
-                                    echo "Checking for existing DB subnet group..."
-                                    aws rds describe-db-subnet-groups --query 'DBSubnetGroups[?DBSubnetGroupName==`wanderwise-db-subnet-group`]' || true
+                                    echo "Checking for DB subnet groups..."
                                     aws rds delete-db-subnet-group --db-subnet-group-name wanderwise-db-subnet-group || true
                                     
                                     # Clean up VPCs and associated resources
@@ -51,26 +60,28 @@ pipeline {
                                     for VPC in $VPCS; do
                                         echo "Cleaning up VPC: $VPC"
                                         
-                                        # Delete EC2 instances in the VPC
+                                        # First, disassociate and release Elastic IPs
+                                        EIPS=$(aws ec2 describe-addresses --filters "Name=domain,Values=vpc" --query 'Addresses[*].AllocationId' --output text)
+                                        for EIP in $EIPS; do
+                                            echo "Releasing Elastic IP: $EIP"
+                                            aws ec2 release-address --allocation-id $EIP || true
+                                        done
+                                        
+                                        # Terminate EC2 instances
                                         INSTANCES=$(aws ec2 describe-instances --filters "Name=vpc-id,Values=$VPC" --query 'Reservations[].Instances[].InstanceId' --output text)
-                                        for INSTANCE in $INSTANCES; do
-                                            echo "Terminating EC2 instance: $INSTANCE"
-                                            aws ec2 terminate-instances --instance-ids $INSTANCE || true
-                                        done
+                                        if [ ! -z "$INSTANCES" ]; then
+                                            echo "Terminating EC2 instances: $INSTANCES"
+                                            aws ec2 terminate-instances --instance-ids $INSTANCES || true
+                                            echo "Waiting for instances to terminate..."
+                                            aws ec2 wait instance-terminated --instance-ids $INSTANCES
+                                        fi
                                         
-                                        # Delete RDS instances
-                                        RDS_INSTANCES=$(aws rds describe-db-instances --query 'DBInstances[?DBSubnetGroup.VpcId==`'$VPC'`].DBInstanceIdentifier' --output text)
-                                        for RDS in $RDS_INSTANCES; do
-                                            echo "Deleting RDS instance: $RDS"
-                                            aws rds delete-db-instance --db-instance-identifier $RDS --skip-final-snapshot || true
-                                        done
-                                        
-                                        # Delete Internet Gateways
+                                        # Detach and delete Internet Gateways
                                         IGW=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC" --query 'InternetGateways[*].InternetGatewayId' --output text)
                                         if [ ! -z "$IGW" ]; then
                                             echo "Detaching and deleting Internet Gateway: $IGW"
-                                            aws ec2 detach-internet-gateway --internet-gateway-id $IGW --vpc-id $VPC
-                                            aws ec2 delete-internet-gateway --internet-gateway-id $IGW
+                                            aws ec2 detach-internet-gateway --internet-gateway-id $IGW --vpc-id $VPC || true
+                                            aws ec2 delete-internet-gateway --internet-gateway-id $IGW || true
                                         fi
                                         
                                         # Delete Subnets
@@ -80,7 +91,7 @@ pipeline {
                                             aws ec2 delete-subnet --subnet-id $SUBNET || true
                                         done
                                         
-                                        # Delete Route Tables
+                                        # Delete Route Tables (except main)
                                         RTS=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC" --query 'RouteTables[?Associations[0].Main!=`true`].RouteTableId' --output text)
                                         for RT in $RTS; do
                                             echo "Deleting route table: $RT"
@@ -94,12 +105,11 @@ pipeline {
                                             aws ec2 delete-security-group --group-id $SG || true
                                         done
                                         
-                                        # Finally delete the VPC
                                         echo "Deleting VPC: $VPC"
                                         aws ec2 delete-vpc --vpc-id $VPC || true
                                     done
                                     
-                                    # Wait for deletions
+                                    echo "Waiting for resources to be cleaned up..."
                                     sleep 60
                                 '''
                             }
