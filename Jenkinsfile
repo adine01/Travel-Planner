@@ -9,6 +9,7 @@ pipeline {
         JWT_SECRET = credentials('jwt-secret')
         DOCKER_REGISTRY = 'amarasenaisuru'
         SSH_KEY = credentials('ssh-key')
+        AWS_DEFAULT_REGION    = 'us-west-2'
     }
 
     parameters {
@@ -37,6 +38,23 @@ pipeline {
                 stage('Setup Terraform') {
                     steps {
                         script {
+                            // Add cleanup for destroy action
+                            if (params.INFRASTRUCTURE_ACTION == 'destroy') {
+                                sh '''
+                                    # List DB subnet groups
+                                    echo "Checking for existing DB subnet group..."
+                                    aws rds describe-db-subnet-groups --query 'DBSubnetGroups[?DBSubnetGroupName==`wanderwise-db-subnet-group`]' || true
+                                    
+                                    # Try to delete if exists
+                                    echo "Attempting to delete DB subnet group..."
+                                    aws rds delete-db-subnet-group --db-subnet-group-name wanderwise-db-subnet-group || true
+                                    
+                                    # Wait for deletion
+                                    sleep 30
+                                '''
+                            }
+
+                            // Original terraform.tfvars creation
                             writeFile file: 'terraform.tfvars', text: """
                                 db_username = "${DB_CREDS_USR}"
                                 db_password = "${DB_CREDS_PSW}"
