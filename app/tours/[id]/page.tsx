@@ -27,7 +27,8 @@ const tour = {
   ],
 }
 
-export default function TourPage({ params }: { params: { id: string } }) {
+export default async function TourPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return (
     <div className="bg-gray-900 text-white">
       <div className="relative h-96 mb-8">
@@ -115,7 +116,7 @@ export default function TourPage({ params }: { params: { id: string } }) {
           Book Now
         </motion.button>
         
-        <ReviewSection tourId={params.id} />
+        <ReviewSection tourId={id} />
       </div>
     </div>
   )

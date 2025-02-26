@@ -1,7 +1,7 @@
 import { Pool } from 'pg'
-import { config } from 'dotenv'
+import * as dotenv from 'dotenv'
 
-config() // Load environment variables from .env file
+dotenv.config() // Load environment variables from .env file
 
 const pool = new Pool({
   user: process.env.DB_USER,
@@ -12,8 +12,15 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 })
 
-export default {
+// Add type for the exported object
+interface DbInterface {
+  query: (text: string, params?: any[]) => Promise<any>;
+  getClient: () => Promise<any>;
+}
+
+const db: DbInterface = {
   query: (text: string, params?: any[]) => pool.query(text, params),
   getClient: () => pool.connect()
 }
 
+export default db
