@@ -2,11 +2,12 @@ pipeline {
     agent any
 
     environment {
-        AWS_CREDENTIALS = 'aws-credentials'
+        AWS_CREDENTIALS = credentials('aws-credentials')
         DB_CREDS = credentials('db-credentials')
         TERRAFORM_ACTION = 'plan' // Default to plan
         JWT_SECRET = credentials('jwt-secret')
         DOCKER_REGISTRY = 'amarasenaisuru'
+        SSH_KEY = credentials('ssh-key')
     }
 
     parameters {
