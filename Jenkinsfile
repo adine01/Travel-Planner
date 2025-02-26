@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        AWS_CREDENTIALS = credentials('aws-credentials')
+        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
         DB_CREDS = credentials('db-credentials')
-        TERRAFORM_ACTION = 'plan' // Default to plan
         JWT_SECRET = credentials('jwt-secret')
         DOCKER_REGISTRY = 'amarasenaisuru'
         SSH_KEY = credentials('ssh-key')
@@ -46,21 +46,17 @@ pipeline {
 
                 stage('Terraform Init') {
                     steps {
-                        withAWS(credentials: AWS_CREDENTIALS) {
-                            bat 'terraform init'
-                        }
+                        sh 'terraform init'  // Changed from bat to sh for Linux
                     }
                 }
 
                 stage('Terraform Plan/Destroy') {
                     steps {
-                        withAWS(credentials: AWS_CREDENTIALS) {
-                            script {
-                                if (params.INFRASTRUCTURE_ACTION == 'destroy') {
-                                    bat 'terraform plan -destroy -out=tfplan'
-                                } else {
-                                    bat 'terraform plan -out=tfplan'
-                                }
+                        script {
+                            if (params.INFRASTRUCTURE_ACTION == 'destroy') {
+                                sh 'terraform plan -destroy -out=tfplan'
+                            } else {
+                                sh 'terraform plan -out=tfplan'
                             }
                         }
                     }
