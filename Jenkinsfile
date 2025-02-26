@@ -45,17 +45,62 @@ pipeline {
                                     aws rds describe-db-subnet-groups --query 'DBSubnetGroups[?DBSubnetGroupName==`wanderwise-db-subnet-group`]' || true
                                     aws rds delete-db-subnet-group --db-subnet-group-name wanderwise-db-subnet-group || true
                                     
-                                    # Clean up VPCs
+                                    # Clean up VPCs and associated resources
                                     echo "Checking for existing VPCs..."
                                     VPCS=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=wanderwise-vpc" --query 'Vpcs[*].VpcId' --output text)
                                     for VPC in $VPCS; do
-                                        echo "Attempting to delete VPC: $VPC"
-                                        # Delete associated resources first
+                                        echo "Cleaning up VPC: $VPC"
+                                        
+                                        # Delete EC2 instances in the VPC
+                                        INSTANCES=$(aws ec2 describe-instances --filters "Name=vpc-id,Values=$VPC" --query 'Reservations[].Instances[].InstanceId' --output text)
+                                        for INSTANCE in $INSTANCES; do
+                                            echo "Terminating EC2 instance: $INSTANCE"
+                                            aws ec2 terminate-instances --instance-ids $INSTANCE || true
+                                        done
+                                        
+                                        # Delete RDS instances
+                                        RDS_INSTANCES=$(aws rds describe-db-instances --query 'DBInstances[?DBSubnetGroup.VpcId==`'$VPC'`].DBInstanceIdentifier' --output text)
+                                        for RDS in $RDS_INSTANCES; do
+                                            echo "Deleting RDS instance: $RDS"
+                                            aws rds delete-db-instance --db-instance-identifier $RDS --skip-final-snapshot || true
+                                        done
+                                        
+                                        # Delete Internet Gateways
+                                        IGW=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC" --query 'InternetGateways[*].InternetGatewayId' --output text)
+                                        if [ ! -z "$IGW" ]; then
+                                            echo "Detaching and deleting Internet Gateway: $IGW"
+                                            aws ec2 detach-internet-gateway --internet-gateway-id $IGW --vpc-id $VPC
+                                            aws ec2 delete-internet-gateway --internet-gateway-id $IGW
+                                        fi
+                                        
+                                        # Delete Subnets
+                                        SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC" --query 'Subnets[*].SubnetId' --output text)
+                                        for SUBNET in $SUBNETS; do
+                                            echo "Deleting subnet: $SUBNET"
+                                            aws ec2 delete-subnet --subnet-id $SUBNET || true
+                                        done
+                                        
+                                        # Delete Route Tables
+                                        RTS=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC" --query 'RouteTables[?Associations[0].Main!=`true`].RouteTableId' --output text)
+                                        for RT in $RTS; do
+                                            echo "Deleting route table: $RT"
+                                            aws ec2 delete-route-table --route-table-id $RT || true
+                                        done
+                                        
+                                        # Delete Security Groups (skip default)
+                                        SGS=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text)
+                                        for SG in $SGS; do
+                                            echo "Deleting security group: $SG"
+                                            aws ec2 delete-security-group --group-id $SG || true
+                                        done
+                                        
+                                        # Finally delete the VPC
+                                        echo "Deleting VPC: $VPC"
                                         aws ec2 delete-vpc --vpc-id $VPC || true
                                     done
                                     
                                     # Wait for deletions
-                                    sleep 30
+                                    sleep 60
                                 '''
                             }
 
