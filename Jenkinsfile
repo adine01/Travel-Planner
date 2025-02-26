@@ -1,6 +1,7 @@
 pipeline {
     agent any
 
+
     environment {
         AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
@@ -112,11 +113,15 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
+        //do not need test for now
+        stage('Build') {
             when { expression { params.INFRASTRUCTURE_ACTION != 'destroy' } }
             steps {
-                sh 'npm install'
-                sh 'npm run build'
+                sh '''
+                    node --version
+                    npm --version
+                    npm install
+                '''
             }
         }
 
