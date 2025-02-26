@@ -12,7 +12,7 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
         DB_CREDS = credentials('db-credentials')
         JWT_SECRET = credentials('jwt-secret')
-        DOCKER_REGISTRY = 'amarasenaisuru'
+        DOCKER_REGISTRY = 'isuruamarasena'
         SSH_KEY = credentials('ssh-key')
         AWS_DEFAULT_REGION    = 'us-west-2'
     }
@@ -214,20 +214,25 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    // Login to Docker Hub
-                    sh '''
-                        echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
-                    '''
-
-                    // Build and push
-                    def appImage = docker.build("${DOCKER_REGISTRY}/wanderwise:${BUILD_NUMBER}")
-                    appImage.push()
-
-                    // Tag as latest
-                    appImage.push('latest')
-
-                    // Logout
-                    sh 'docker logout'
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh '''
+                            # Login to Docker Hub
+                            echo "$DOCKER_PASS" | docker login -u isuruamarasena --password-stdin
+                            
+                            # Build the image
+                            docker build -t isuruamarasena/wanderwise:${BUILD_NUMBER} .
+                            
+                            # Push the image
+                            docker push isuruamarasena/wanderwise:${BUILD_NUMBER}
+                            
+                            # Tag and push latest
+                            docker tag isuruamarasena/wanderwise:${BUILD_NUMBER} isuruamarasena/wanderwise:latest
+                            docker push isuruamarasena/wanderwise:latest
+                            
+                            # Cleanup
+                            docker logout
+                        '''
+                    }
                 }
             }
         }
