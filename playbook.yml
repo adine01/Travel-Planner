@@ -1,36 +1,40 @@
----
 - name: Configure WanderWise Web Server
-  hosts: all
+  hosts: webservers
   become: yes
 
   tasks:
-    - name: Update apt cache
-      apt:
-        update_cache: yes
-
     - name: Install Docker
-      apt:
-        name: docker.io
+      amazon-linux-extras:
+        name: docker
         state: present
 
-    - name: Install Docker Compose
-      get_url:
-        url: https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64
-        dest: /usr/local/bin/docker-compose
-        mode: '0755'
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
 
     - name: Copy Docker Compose file
       copy:
         src: docker-compose.yml
-        dest: /home/ubuntu/docker-compose.yml
+        dest: /home/ec2-user/docker-compose.yml
 
     - name: Copy .env file
       copy:
         src: .env
-        dest: /home/ubuntu/.env
+        dest: /home/ec2-user/.env
 
-    - name: Run Docker Compose
+    - name: Pull and run application
       docker_compose:
-        project_src: /home/ubuntu
+        project_src: /home/ec2-user
         state: present
 
+    - name: Check Docker service status
+      service_facts:
+      register: docker_status

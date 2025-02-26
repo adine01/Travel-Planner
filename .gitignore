@@ -39,3 +39,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+terraform.tfvars
+.terraform/
+*.tfstate
+*.tfstate.*
+
+
+.aws/
+*.csv
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/
+.terraform.tfvars
+
+
+# SSH Keys
+wanderwise-key*
+*.pem

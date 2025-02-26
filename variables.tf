@@ -10,3 +10,6 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "region" {
+  default = "us-west-2"
+}

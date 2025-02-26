@@ -12,6 +12,7 @@ services:
       - DB_NAME=${DB_NAME}
       - DB_PORT=5432
       - JWT_SECRET=${JWT_SECRET}
+      - NODE_ENV=production
     depends_on:
       - db
 
