@@ -67,9 +67,9 @@ pipeline {
                         expression { params.INFRASTRUCTURE_ACTION == 'apply' || params.INFRASTRUCTURE_ACTION == 'destroy' }
                     }
                     steps {
-                        withAWS(credentials: AWS_CREDENTIALS) {
+                        steps {
                             input "Execute ${params.INFRASTRUCTURE_ACTION} action?"
-                            bat 'terraform apply -auto-approve tfplan'
+                            sh 'terraform apply -auto-approve tfplan'
                         }
                     }
                 }
@@ -83,11 +83,11 @@ pipeline {
                     try {
                         // Get infrastructure outputs if they exist
                         if (params.INFRASTRUCTURE_ACTION == 'apply') {
-                            env.EC2_IP = bat(
+                            env.EC2_IP = sh(
                                 script: 'terraform output -raw instance_public_ip',
                                 returnStdout: true
                             ).trim()
-                            env.DB_HOST = bat(
+                            env.DB_HOST = sh(
                                 script: 'terraform output -raw rds_endpoint',
                                 returnStdout: true
                             ).trim()
@@ -102,9 +102,9 @@ pipeline {
                             NODE_ENV=production
                         """
 
-                        writeFile file: 'inventory.ini', text: """
-                            [webservers]
-                            ${env.EC2_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY}
+                        writeFile file: '/var/lib/jenkins/workspace/travel-planner/inventory.ini', text: """
+                        [webservers]
+                        ${env.EC2_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY}
                         """
 
                     } catch (Exception e) {
@@ -117,8 +117,8 @@ pipeline {
         stage('Build & Test') {
             when { expression { params.INFRASTRUCTURE_ACTION != 'destroy' } }
             steps {
-                bat 'npm install'
-                bat 'npm run build'
+                sh 'npm install'
+                sh 'npm run build'
             }
         }
 
