@@ -38,18 +38,23 @@ pipeline {
                 stage('Setup Terraform') {
                     steps {
                         script {
-                            // Add cleanup for destroy action
                             if (params.INFRASTRUCTURE_ACTION == 'destroy') {
                                 sh '''
-                                    # List DB subnet groups
+                                    # Clean up DB subnet groups
                                     echo "Checking for existing DB subnet group..."
                                     aws rds describe-db-subnet-groups --query 'DBSubnetGroups[?DBSubnetGroupName==`wanderwise-db-subnet-group`]' || true
-                                    
-                                    # Try to delete if exists
-                                    echo "Attempting to delete DB subnet group..."
                                     aws rds delete-db-subnet-group --db-subnet-group-name wanderwise-db-subnet-group || true
                                     
-                                    # Wait for deletion
+                                    # Clean up VPCs
+                                    echo "Checking for existing VPCs..."
+                                    VPCS=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=wanderwise-vpc" --query 'Vpcs[*].VpcId' --output text)
+                                    for VPC in $VPCS; do
+                                        echo "Attempting to delete VPC: $VPC"
+                                        # Delete associated resources first
+                                        aws ec2 delete-vpc --vpc-id $VPC || true
+                                    done
+                                    
+                                    # Wait for deletions
                                     sleep 30
                                 '''
                             }
