@@ -67,10 +67,8 @@ pipeline {
                         expression { params.INFRASTRUCTURE_ACTION == 'apply' || params.INFRASTRUCTURE_ACTION == 'destroy' }
                     }
                     steps {
-                        steps {
-                            input "Execute ${params.INFRASTRUCTURE_ACTION} action?"
-                            sh 'terraform apply -auto-approve tfplan'
-                        }
+                        input "Execute ${params.INFRASTRUCTURE_ACTION} action?"
+                        sh 'terraform apply -auto-approve tfplan'
                     }
                 }
             }
