@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+    nodejs 'Node20.13.1'  // Match your WSL Ubuntu version
+    }
+
 
     environment {
         AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
@@ -196,9 +200,12 @@ pipeline {
             when { expression { params.INFRASTRUCTURE_ACTION != 'destroy' } }
             steps {
                 sh '''
+                    echo "Node version:"
                     node --version
+                    echo "NPM version:"
                     npm --version
-                    npm install
+                    echo "Installing dependencies..."
+                    npm ci  // Using ci instead of install for cleaner installs
                 '''
             }
         }
