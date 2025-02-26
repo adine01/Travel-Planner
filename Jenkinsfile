@@ -7,6 +7,7 @@ pipeline {
 
 
     environment {
+        DOCKER_CREDENTIALS = credentials('docker-hub-credentials')
         AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
         DB_CREDS = credentials('db-credentials')
@@ -211,13 +212,22 @@ pipeline {
         }
 
         stage('Docker Build & Push') {
-            when { expression { params.INFRASTRUCTURE_ACTION != 'destroy' } }
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker-registry') {
-                        def dockerImage = docker.build("${DOCKER_REGISTRY}/wanderwise:${BUILD_NUMBER}")
-                        dockerImage.push()
-                    }
+                    // Login to Docker Hub
+                    sh '''
+                        echo $DOCKER_CREDENTIALS_PSW | docker login -u $DOCKER_CREDENTIALS_USR --password-stdin
+                    '''
+
+                    // Build and push
+                    def appImage = docker.build("${DOCKER_REGISTRY}/wanderwise:${BUILD_NUMBER}")
+                    appImage.push()
+
+                    // Tag as latest
+                    appImage.push('latest')
+
+                    // Logout
+                    sh 'docker logout'
                 }
             }
         }
