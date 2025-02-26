@@ -238,13 +238,28 @@ pipeline {
         }
 
         stage('Deploy') {
-            when { expression { params.INFRASTRUCTURE_ACTION != 'destroy' } }
+            when { 
+                expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
+            }
             steps {
-                ansiblePlaybook(
-                    playbook: 'playbook.yml',
-                    inventory: 'inventory.ini',
-                    credentialsId: 'ssh-key'
-                )
+                script {
+                    try {
+                        // Verify inventory file exists
+                        sh 'cat inventory.ini'
+                        
+                        // Run Ansible playbook with detailed output
+                        ansiblePlaybook(
+                            playbook: 'playbook.yml',
+                            inventory: 'inventory.ini',
+                            credentialsId: 'ssh-key',
+                            extras: '-v',  // Add verbose output
+                            colorized: true
+                        )
+                    } catch (Exception e) {
+                        echo "Deployment failed: ${e.getMessage()}"
+                        throw e
+                    }
+                }
             }
         }
     }
