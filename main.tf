@@ -13,6 +13,10 @@ resource "aws_key_pair" "wanderwise" {
   }
 }
 
+data "aws_key_pair" "wanderwise" {
+  key_name = "wanderwise-key"
+}
+
 # VPC with internet access
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
@@ -134,7 +138,7 @@ resource "aws_instance" "web" {
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.main.id
   vpc_security_group_ids = [aws_security_group.allow_web.id]
-  key_name = aws_key_pair.wanderwise.key_name
+  key_name = data.aws_key_pair.wanderwise.key_name
 
   tags = {
     Name = "WanderWise-WebServer"

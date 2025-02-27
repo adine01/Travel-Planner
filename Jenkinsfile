@@ -73,31 +73,21 @@ pipeline {
                                         ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
                                         chmod 644 keys/wanderwise-key.pub
                                         
-                                        # Check if key pair exists
-                                        echo "Checking if key pair exists..."
+                                        # Check if key pair exists and import if needed
                                         if ! aws ec2 describe-key-pairs --key-names wanderwise-key &>/dev/null; then
                                             echo "Importing key pair to AWS..."
-                                            # Base64 encode the public key
-                                            PUBLIC_KEY_B64=$(cat keys/wanderwise-key.pub | base64 -w 0)
                                             aws ec2 import-key-pair \
                                                 --key-name wanderwise-key \
-                                                --public-key-material "$PUBLIC_KEY_B64"
+                                                --public-key-material fileb://keys/wanderwise-key.pub
                                         else
                                             echo "Key pair already exists in AWS"
                                         fi
                                     '''
                                     
-                                    // Get the public key content for Terraform
-                                    def publicKey = sh(
-                                        script: 'cat keys/wanderwise-key.pub',
-                                        returnStdout: true
-                                    ).trim()
-                                    
-                                    // Write terraform.tfvars with all required variables
+                                    // Write terraform.tfvars
                                     writeFile file: 'terraform.tfvars', text: """
                                         db_username = "${DB_CREDS_USR}"
                                         db_password = "${DB_CREDS_PSW}"
-                                        ssh_public_key = "${publicKey}"
                                         region = "us-west-2"
                                     """
                                 }
