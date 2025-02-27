@@ -60,26 +60,25 @@ pipeline {
                     steps {
                         script {
                             if (params.INFRASTRUCTURE_ACTION == 'apply') {
-                                // Create keys directory
-                                sh 'mkdir -p keys'
-
-                                // Write SSH keys
                                 withCredentials([sshUserPrivateKey(credentialsId: 'ssh-key', keyFileVariable: 'SSH_KEY')]) {
                                     sh '''
+                                        # Create temporary directory for keys
+                                        mkdir -p keys
+                                        
+                                        # Copy private key and set permissions
                                         cp "$SSH_KEY" keys/wanderwise-key
                                         chmod 600 keys/wanderwise-key
+                                        
+                                        # Generate public key from private key
                                         ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
                                         chmod 644 keys/wanderwise-key.pub
-
-                                        # Debug output (masked)
-                                        echo "Public key content:"
-                                        cat keys/wanderwise-key.pub
-
-                                        # Import key to AWS
+                                        
+                                        # Import to AWS
                                         echo "Importing key pair to AWS..."
+                                        aws ec2 delete-key-pair --key-name wanderwise-key || true
                                         aws ec2 import-key-pair \
                                             --key-name wanderwise-key \
-                                            --public-key-material fileb://keys/wanderwise-key.pub || true
+                                            --public-key-material fileb://keys/wanderwise-key.pub
                                     '''
                                 }
                             }
