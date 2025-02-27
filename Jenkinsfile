@@ -320,7 +320,7 @@ pipeline {
 
                         // Create inventory file without authentication
                         writeFile file: 'ansible-workspace/inventory.ini', text: """[webservers]
-        ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no -o PermitEmptyPasswords=yes' ansible_become=yes ansible_become_method=sudo"""
+        ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' ansible_become=yes ansible_become_method=sudo"""
 
                         // Run Ansible in Docker with proper volumes
                         docker.image(env.ANSIBLE_CONTAINER).inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
@@ -328,11 +328,11 @@ pipeline {
                                 cd /ansible
                                 
                                 # Install required packages
-                                apk add --no-cache openssh-client
+                                apk add --no-cache openssh-client sshpass
                                 
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 
-                                # Run Ansible without password
+                                # Run Ansible playbook
                                 ansible-playbook -i inventory.ini playbook.yml -vvv
                             '''
                         }
