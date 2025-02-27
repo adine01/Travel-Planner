@@ -122,15 +122,6 @@ resource "aws_security_group" "allow_web" {
   }
 }
 
-resource "aws_security_group_rule" "allow_ssh" {
-  type              = "ingress"
-  from_port         = 22
-  to_port           = 22
-  protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.ec2_sg.id
-}
-
 # EC2 Instance
 resource "aws_instance" "web" {
   ami           = "ami-008fe2fc65df48dac"  # Latest Amazon Linux 2 in us-west-2
