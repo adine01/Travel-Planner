@@ -4,11 +4,7 @@ provider "aws" {
 
 resource "aws_key_pair" "wanderwise" {
   key_name   = "wanderwise-key"
-  public_key = var.ssh_public_key  # Use a variable instead of file()
-
-  lifecycle {
-    create_before_destroy = true
-  }
+  public_key = file("${path.module}/wanderwise-key.pub")
 }
 
 # VPC with internet access

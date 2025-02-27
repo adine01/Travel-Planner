@@ -13,9 +13,3 @@ variable "db_password" {
 variable "region" {
   default = "us-west-2"
 }
-
-
-variable "ssh_public_key" {
-  description = "Public key for EC2 SSH access"
-  type        = string
-}
