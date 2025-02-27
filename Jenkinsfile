@@ -287,6 +287,18 @@ pipeline {
                 }
             }
         }
+        stage('Setup Dependencies') {
+            when { 
+                expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
+            }
+            steps {
+                sh '''
+                    sudo apt-get update
+                    sudo apt-get install -y sshpass python3-pip
+                    pip3 install ansible
+                '''
+            }
+        }
 
         stage('Deploy') {
             when { 
@@ -295,17 +307,22 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Update inventory file with password authentication
+                        // Create inventory file with password authentication
                         writeFile file: 'inventory.ini', text: """[webservers]
-        ${env.EC2_IP} ansible_user=ec2-user ansible_password=wanderwise123 ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
-                        
-                        // Run Ansible playbook
-                        ansiblePlaybook(
-                            playbook: 'playbook.yml',
-                            inventory: 'inventory.ini',
-                            extras: '-vvv',
-                            colorized: true
-                        )
+                        ${env.EC2_IP} ansible_user=ec2-user ansible_password=wanderwise123 ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_become=yes ansible_become_method=sudo"""
+
+                        // Set environment variables for Ansible
+                        withEnv([
+                            'ANSIBLE_HOST_KEY_CHECKING=False',
+                            'SSHPASS=wanderwise123'
+                        ]) {
+                            ansiblePlaybook(
+                                playbook: 'playbook.yml',
+                                inventory: 'inventory.ini',
+                                extras: '-vvv',
+                                colorized: true
+                            )
+                        }
                     } catch (Exception e) {
                         echo "Deployment failed: ${e.getMessage()}"
                         throw e

@@ -2,11 +2,22 @@
 - name: Configure WanderWise Web Server
   hosts: webservers
   become: yes
+  gather_facts: yes
+  vars:
+    ansible_connection: ssh
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_become_method: sudo
+    ansible_python_interpreter: /usr/bin/python3
 
   tasks:
-    - name: Install Docker
-      yum:
-        name: docker
+    # - name: Install Docker
+    #   yum:
+    #     name: docker
+    #     state: present
+    #   become: yes
+    - name: Install Docker Python library
+      pip:
+        name: docker-py
         state: present
       become: yes
 

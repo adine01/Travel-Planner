@@ -118,11 +118,13 @@ resource "aws_instance" "web" {
   associate_public_ip_address = true
   
   # Add user data to set up password authentication
-  user_data = <<-EOF
+    user_data = <<-EOF
               #!/bin/bash
               sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
               systemctl restart sshd
               echo 'ec2-user:wanderwise123' | chpasswd
+              yum update -y
+              yum install -y python3 python3-pip
               EOF
 
   tags = {
