@@ -37,19 +37,17 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            stage('Checkout') {
-                steps {
-                    // Add clean checkout
-                    cleanWs()
-                    checkout([$class: 'GitSCM',
-                        branches: [[name: '*/main']],
-                        extensions: [[$class: 'CleanBeforeCheckout']],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/adine01/Travel-Planner.git',
-                            credentialsId: 'github-credentials'
-                        ]]
-                    ])
-                }
+            steps {
+                // Add clean checkout
+                cleanWs()
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    extensions: [[$class: 'CleanBeforeCheckout']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/adine01/Travel-Planner.git',
+                        credentialsId: 'github-credentials'
+                    ]]
+                ])
             }
         }
 
