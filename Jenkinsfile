@@ -21,6 +21,8 @@ pipeline {
         JWT_SECRET = credentials('jwt-secret')
         DOCKER_REGISTRY = 'isuruamarasena'
         AWS_DEFAULT_REGION    = 'us-west-2'
+        ANSIBLE_CONTAINER = 'cytopia/ansible:latest'
+        DOCKER_HOST = 'unix:///var/run/docker.sock'
     }
 
     parameters {
@@ -287,38 +289,17 @@ pipeline {
                 }
             }
         }
-        stage('Setup Dependencies') {
+
+        stage('Prepare Deployment') {
             when { 
                 expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
             }
             steps {
                 script {
-                    // First, check if sshpass is already installed
-                    def sshpassInstalled = sh(
-                        script: 'which sshpass || true',
-                        returnStatus: true
-                    ) == 0
-
-                    if (!sshpassInstalled) {
-                        // Install required packages with sudo
-                        sh '''
-                            echo "Installing required packages..."
-                            sudo apt-get update
-                            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass python3-pip
-                        '''
-                    }
-
-                    // Install Ansible in user space (doesn't require sudo)
+                    // Verify Docker access
                     sh '''
-                        echo "Installing Ansible..."
-                        python3 -m pip install --user ansible
-                        
-                        # Add local bin to PATH
-                        export PATH=$HOME/.local/bin:$PATH
-                        
-                        # Verify installations
-                        ansible --version || echo "Ansible installation failed"
-                        sshpass -V || echo "sshpass installation failed"
+                        docker info || { echo "Docker not accessible"; exit 1; }
+                        docker pull ${ANSIBLE_CONTAINER}
                     '''
                 }
             }
@@ -331,26 +312,30 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Create inventory file with password authentication
-                        writeFile file: 'inventory.ini', text: """[webservers]
-                        ${env.EC2_IP} ansible_user=ec2-user ansible_password=wanderwise123 ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_become=yes ansible_become_method=sudo"""
+                        // Create workspace and copy files
+                        sh '''
+                            mkdir -p ansible-workspace
+                            cp playbook.yml inventory.ini .env ansible-workspace/
+                        '''
 
-                        // Set environment variables for Ansible
-                        withEnv([
-                            'ANSIBLE_HOST_KEY_CHECKING=False',
-                            'SSHPASS=wanderwise123',
-                            "PATH+ANSIBLE=${env.HOME}/.local/bin:${env.PATH}"
-                        ]) {    
-                            ansiblePlaybook(
-                                playbook: 'playbook.yml',
-                                inventory: 'inventory.ini',
-                                extras: '-vvv',
-                                colorized: true
-                            )
+                        // Run Ansible in Docker with proper volumes
+                        docker.image(env.ANSIBLE_CONTAINER).inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
+                            sh '''
+                                cd /ansible
+                                export ANSIBLE_HOST_KEY_CHECKING=False
+                                export SSHPASS=wanderwise123
+                                
+                                # Install sshpass in container if needed
+                                apk add --no-cache sshpass openssh-client
+                                
+                                ansible-playbook -i inventory.ini playbook.yml -vvv
+                            '''
                         }
                     } catch (Exception e) {
                         echo "Deployment failed: ${e.getMessage()}"
                         throw e
+                    } finally {
+                        sh 'rm -rf ansible-workspace'
                     }
                 }
             }
