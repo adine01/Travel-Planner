@@ -69,20 +69,53 @@ pipeline {
                                         cp "$SSH_KEY" keys/wanderwise-key
                                         chmod 600 keys/wanderwise-key
                                         
-                                        # Generate public key from private key
-                                        ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
-                                        chmod 644 keys/wanderwise-key.pub
+                                        # Generate public key and save content
+                                        PUBLIC_KEY=$(ssh-keygen -y -f keys/wanderwise-key)
                                         
                                         # Import to AWS
                                         echo "Importing key pair to AWS..."
                                         aws ec2 delete-key-pair --key-name wanderwise-key || true
                                         aws ec2 import-key-pair \
                                             --key-name wanderwise-key \
-                                            --public-key-material fileb://keys/wanderwise-key.pub
+                                            --public-key-material "$PUBLIC_KEY"
                                     '''
+                                    
+                                    // Get the public key content for Terraform
+                                    def publicKey = sh(
+                                        script: 'ssh-keygen -y -f keys/wanderwise-key',
+                                        returnStdout: true
+                                    ).trim()
+                                    
+                                    // Write terraform.tfvars with all variables
+                                    writeFile file: 'terraform.tfvars', text: """
+                                        db_username = "${DB_CREDS_USR}"
+                                        db_password = "${DB_CREDS_PSW}"
+                                        ssh_public_key = "${publicKey}"
+                                    """
                                 }
                             }
                             if (params.INFRASTRUCTURE_ACTION == 'destroy') {
+                                withCredentials([sshUserPrivateKey(credentialsId: 'ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                                    // Generate dummy public key for destroy operation
+                                    sh '''
+                                        mkdir -p keys
+                                        cp "$SSH_KEY" keys/wanderwise-key
+                                        chmod 600 keys/wanderwise-key
+                                        PUBLIC_KEY=$(ssh-keygen -y -f keys/wanderwise-key)
+                                    '''
+                                    
+                                    def publicKey = sh(
+                                        script: 'ssh-keygen -y -f keys/wanderwise-key',
+                                        returnStdout: true
+                                    ).trim()
+
+                                    // Write terraform.tfvars with required variables for destroy
+                                    writeFile file: 'terraform.tfvars', text: """
+                                        db_username = "${DB_CREDS_USR}"
+                                        db_password = "${DB_CREDS_PSW}"
+                                        ssh_public_key = "${publicKey}"
+                                    """
+
                                 sh '''
                                     # Clean up RDS instances first
                                     echo "Checking for RDS instances..."
@@ -155,7 +188,8 @@ pipeline {
                                     
                                     echo "Waiting for resources to be cleaned up..."
                                     sleep 60
-                                '''
+                                    '''
+                                }
                             }
 
                             // Original terraform.tfvars creation

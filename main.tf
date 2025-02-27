@@ -3,8 +3,8 @@ provider "aws" {
 }
 
 resource "aws_key_pair" "wanderwise" {
-  key_name   = "wanderwise-key"  # Changed from key_name_prefix
-  public_key = file("${path.module}/keys/wanderwise-key.pub")
+  key_name   = "wanderwise-key"
+  public_key = var.ssh_public_key  # Use a variable instead of file()
 
   lifecycle {
     create_before_destroy = true
