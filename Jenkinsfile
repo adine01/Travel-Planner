@@ -295,9 +295,9 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Update inventory file without SSH key
+                        // Update inventory file with password authentication
                         writeFile file: 'inventory.ini', text: """[webservers]
-            ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
+        ${env.EC2_IP} ansible_user=ec2-user ansible_password=wanderwise123 ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
                         
                         // Run Ansible playbook
                         ansiblePlaybook(

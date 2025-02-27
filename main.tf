@@ -86,6 +86,14 @@ resource "aws_security_group" "allow_web" {
   vpc_id = aws_vpc.main.id
 
   ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
     description = "All Traffic"
     from_port   = 0
     to_port     = 0
@@ -103,11 +111,19 @@ resource "aws_security_group" "allow_web" {
 
 # EC2 Instance
 resource "aws_instance" "web" {
-  ami           = "ami-008fe2fc65df48dac"  # Latest Amazon Linux 2 in us-west-2
+  ami           = "ami-008fe2fc65df48dac"
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.main.id
   vpc_security_group_ids = [aws_security_group.allow_web.id]
   associate_public_ip_address = true
+  
+  # Add user data to set up password authentication
+  user_data = <<-EOF
+              #!/bin/bash
+              sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              systemctl restart sshd
+              echo 'ec2-user:wanderwise123' | chpasswd
+              EOF
 
   tags = {
     Name = "WanderWise-WebServer"
