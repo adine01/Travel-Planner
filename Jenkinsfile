@@ -292,27 +292,35 @@ pipeline {
                 expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
             }
             steps {
-                // Use NOPASSWD sudo or alternative approach
-                sh '''
-                    # Update package lists without sudo
-                    apt-get update || true
-                    
-                    # Install packages without sudo
-                    apt-get install -y sshpass python3-pip || {
-                        # If direct install fails, try with different approaches
-                        command -v sshpass >/dev/null 2>&1 || {
-                            echo "sshpass not found, trying alternative installation..."
-                            # Try to install without sudo
-                            DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass
-                        }
+                script {
+                    // First, check if sshpass is already installed
+                    def sshpassInstalled = sh(
+                        script: 'which sshpass || true',
+                        returnStatus: true
+                    ) == 0
+
+                    if (!sshpassInstalled) {
+                        // Install required packages with sudo
+                        sh '''
+                            echo "Installing required packages..."
+                            sudo apt-get update
+                            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass python3-pip
+                        '''
                     }
-                    
-                    # Install Ansible using pip user install
-                    pip3 install --user ansible
-                    
-                    # Add local bin to PATH
-                    export PATH=$PATH:$HOME/.local/bin
-                '''
+
+                    // Install Ansible in user space (doesn't require sudo)
+                    sh '''
+                        echo "Installing Ansible..."
+                        python3 -m pip install --user ansible
+                        
+                        # Add local bin to PATH
+                        export PATH=$HOME/.local/bin:$PATH
+                        
+                        # Verify installations
+                        ansible --version || echo "Ansible installation failed"
+                        sshpass -V || echo "sshpass installation failed"
+                    '''
+                }
             }
         }
 
@@ -330,8 +338,9 @@ pipeline {
                         // Set environment variables for Ansible
                         withEnv([
                             'ANSIBLE_HOST_KEY_CHECKING=False',
-                            'SSHPASS=wanderwise123'
-                        ]) {
+                            'SSHPASS=wanderwise123',
+                            "PATH+ANSIBLE=${env.HOME}/.local/bin:${env.PATH}"
+                        ]) {    
                             ansiblePlaybook(
                                 playbook: 'playbook.yml',
                                 inventory: 'inventory.ini',
