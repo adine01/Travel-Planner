@@ -70,18 +70,18 @@ pipeline {
                                         chmod 600 keys/wanderwise-key
                                         ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
                                         chmod 644 keys/wanderwise-key.pub
+
+                                        # Debug output (masked)
+                                        echo "Public key content:"
+                                        cat keys/wanderwise-key.pub
+
+                                        # Import key to AWS
+                                        echo "Importing key pair to AWS..."
+                                        aws ec2 import-key-pair \
+                                            --key-name wanderwise-key \
+                                            --public-key-material fileb://keys/wanderwise-key.pub || true
                                     '''
                                 }
-
-                                // Clean up existing key pair
-                                sh '''
-                                    echo "Checking for existing key pair..."
-                                    KEY_PAIR=$(aws ec2 describe-key-pairs --key-names wanderwise-key --query 'KeyPairs[*].KeyName' --output text || echo "")
-                                    if [ ! -z "$KEY_PAIR" ]; then
-                                        echo "Deleting existing key pair: $KEY_PAIR"
-                                        aws ec2 delete-key-pair --key-name wanderwise-key
-                                    fi
-                                '''
                             }
                             if (params.INFRASTRUCTURE_ACTION == 'destroy') {
                                 sh '''
