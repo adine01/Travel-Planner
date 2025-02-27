@@ -2,6 +2,11 @@ provider "aws" {
   region = "us-west-2"
 }
 
+resource "aws_key_pair" "wanderwise" {
+  key_name   = "wanderwise-key"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSWvpw1UP/nXcE0y3MMDL3jvAlxqIULp2fj5YC1xco2u76rqpwuhn+M+Yt1UR+RCM20cmHQq0HYd9KiqDEEXqZykT/BfCiykV0Wa2wy9vqTtJmFOMcSOvvslyH1GOiXjZMhtO+Sn/zvOGV7lSOYIfiU9lMPsQqdt7kXFuE90D4iVvBDZIKOsLjX6SF5Doabk4DBcHgaz7OX6xF/pyqJaymvszbLEN5V2jiJuY+KKbMqdsddRKFJg+Cahh5b6PkG3dmmNrL31bh3UxM1HKrMtSNFRXap1ZTfFLdTF6WxhnIZcXQ6kTJkP+eBs9o6Z0Ubym6wF8rq+9SOBwbXNqJyWq1 amara@Isuru"
+}
+
 # VPC with internet access
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
@@ -117,13 +122,22 @@ resource "aws_security_group" "allow_web" {
   }
 }
 
+resource "aws_security_group_rule" "allow_ssh" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.ec2_sg.id
+}
+
 # EC2 Instance
 resource "aws_instance" "web" {
   ami           = "ami-008fe2fc65df48dac"  # Latest Amazon Linux 2 in us-west-2
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.main.id
   vpc_security_group_ids = [aws_security_group.allow_web.id]
-  key_name = "wanderwise-key"
+  key_name = aws_key_pair.wanderwise.key_name
 
   tags = {
     Name = "WanderWise-WebServer"

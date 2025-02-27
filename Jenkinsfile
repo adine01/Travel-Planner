@@ -260,27 +260,24 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Create inventory file
-                        writeFile file: 'inventory.ini', text: """[webservers]
-        ${env.EC2_IP ?: error('EC2_IP is not set')} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
+                        // Use SSH credentials properly
+                        withCredentials([sshUserPrivateKey(credentialsId: 'ssh-key', keyFileVariable: 'SSH_KEY_FILE')]) {
+                            // Create inventory file with proper key path
+                            writeFile file: 'inventory.ini', text: """[webservers]
+        ${env.EC2_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
 
-                        // Print inventory for debugging
-                        sh 'cat inventory.ini'
-                        
-                        // Install required Ansible collections
-                        sh '''
-                            ansible-galaxy collection install community.docker
-                            ansible-galaxy collection install amazon.aws
-                        '''
-                        
-                        // Run Ansible playbook
-                        ansiblePlaybook(
-                            playbook: 'playbook.yml',
-                            inventory: 'inventory.ini',
-                            credentialsId: 'ssh-key',
-                            extras: '-vvv',  // More verbose output for debugging
-                            colorized: true
-                        )
+                            // Print inventory for debugging (mask the key)
+                            sh 'cat inventory.ini | sed "s|${SSH_KEY_FILE}|****|g"'
+                            
+                            // Run Ansible playbook
+                            ansiblePlaybook(
+                                playbook: 'playbook.yml',
+                                inventory: 'inventory.ini',
+                                credentialsId: 'ssh-key',
+                                extras: '-vvv',
+                                colorized: true
+                            )
+                        }
                     } catch (Exception e) {
                         echo "Deployment failed: ${e.getMessage()}"
                         throw e
