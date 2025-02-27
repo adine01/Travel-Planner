@@ -292,10 +292,26 @@ pipeline {
                 expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
             }
             steps {
+                // Use NOPASSWD sudo or alternative approach
                 sh '''
-                    sudo apt-get update
-                    sudo apt-get install -y sshpass python3-pip
-                    pip3 install ansible
+                    # Update package lists without sudo
+                    apt-get update || true
+                    
+                    # Install packages without sudo
+                    apt-get install -y sshpass python3-pip || {
+                        # If direct install fails, try with different approaches
+                        command -v sshpass >/dev/null 2>&1 || {
+                            echo "sshpass not found, trying alternative installation..."
+                            # Try to install without sudo
+                            DEBIAN_FRONTEND=noninteractive apt-get install -y sshpass
+                        }
+                    }
+                    
+                    # Install Ansible using pip user install
+                    pip3 install --user ansible
+                    
+                    # Add local bin to PATH
+                    export PATH=$PATH:$HOME/.local/bin
                 '''
             }
         }
