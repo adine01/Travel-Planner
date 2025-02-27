@@ -326,6 +326,10 @@ pipeline {
                         docker.image(env.ANSIBLE_CONTAINER).inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
                             sh '''
                                 cd /ansible
+                                
+                                # Install required packages
+                                apk add --no-cache openssh-client
+                                
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 
                                 # Run Ansible without password
@@ -341,7 +345,7 @@ pipeline {
                 }
             }
         }
-    }
+    }               
 
     post {
         success {
