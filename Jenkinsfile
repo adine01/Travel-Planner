@@ -1,8 +1,15 @@
 pipeline {
     agent any
 
+    options {
+        // Add cleanup options
+        disableConcurrentBuilds()
+        skipDefaultCheckout(false)
+    }
+
     tools {
-    nodejs 'Node20.13.1'  // Match your WSL Ubuntu version
+        nodejs 'Node20.13.1'  // Match your WSL Ubuntu version
+        git 'Default' 
     }
 
 
@@ -30,8 +37,19 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            steps {
-                checkout scm
+            stage('Checkout') {
+                steps {
+                    // Add clean checkout
+                    cleanWs()
+                    checkout([$class: 'GitSCM',
+                        branches: [[name: '*/main']],
+                        extensions: [[$class: 'CleanBeforeCheckout']],
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/adine01/Travel-Planner.git',
+                            credentialsId: 'github-credentials'
+                        ]]
+                    ])
+                }
             }
         }
 
