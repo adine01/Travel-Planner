@@ -59,6 +59,17 @@ pipeline {
                 stage('Setup Terraform') {
                     steps {
                         script {
+                            if (params.INFRASTRUCTURE_ACTION == 'apply') {
+                                // Cleanup existing key pair
+                                sh '''
+                                    echo "Checking for existing key pair..."
+                                    KEY_PAIR=$(aws ec2 describe-key-pairs --key-names wanderwise-key --query 'KeyPairs[*].KeyName' --output text || echo "")
+                                    if [ ! -z "$KEY_PAIR" ]; then
+                                        echo "Deleting existing key pair: $KEY_PAIR"
+                                        aws ec2 delete-key-pair --key-name wanderwise-key
+                                    fi
+                                '''
+                            }
                             if (params.INFRASTRUCTURE_ACTION == 'destroy') {
                                 sh '''
                                     # Clean up RDS instances first
