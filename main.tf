@@ -4,7 +4,7 @@ provider "aws" {
 
 resource "aws_key_pair" "wanderwise" {
   key_name   = "wanderwise-key"
-  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSWvpw1UP/nXcE0y3MMDL3jvAlxqIULp2fj5YC1xco2u76rqpwuhn+M+Yt1UR+RCM20cmHQq0HYd9KiqDEEXqZykT/BfCiykV0Wa2wy9vqTtJmFOMcSOvvslyH1GOiXjZMhtO+Sn/zvOGV7lSOYIfiU9lMPsQqdt7kXFuE90D4iVvBDZIKOsLjX6SF5Doabk4DBcHgaz7OX6xF/pyqJaymvszbLEN5V2jiJuY+KKbMqdsddRKFJg+Cahh5b6PkG3dmmNrL31bh3UxM1HKrMtSNFRXap1ZTfFLdTF6WxhnIZcXQ6kTJkP+eBs9o6Z0Ubym6wF8rq+9SOBwbXNqJyWq1 amara@Isuru"
+  public_key = file("${path.module}/wanderwise-key.pub")
 }
 
 # VPC with internet access
