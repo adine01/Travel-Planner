@@ -101,19 +101,24 @@ pipeline {
                                         mkdir -p keys
                                         cp "$SSH_KEY" keys/wanderwise-key
                                         chmod 600 keys/wanderwise-key
-                                        PUBLIC_KEY=$(ssh-keygen -y -f keys/wanderwise-key)
+                                        
+                                        # Generate and save public key to file
+                                        ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
+                                        chmod 644 keys/wanderwise-key.pub
                                     '''
                                     
+                                    // Get the public key content
                                     def publicKey = sh(
-                                        script: 'ssh-keygen -y -f keys/wanderwise-key',
+                                        script: 'cat keys/wanderwise-key.pub',
                                         returnStdout: true
                                     ).trim()
 
-                                    // Write terraform.tfvars with required variables for destroy
+                                    // Write terraform.tfvars with ALL required variables
                                     writeFile file: 'terraform.tfvars', text: """
                                         db_username = "${DB_CREDS_USR}"
                                         db_password = "${DB_CREDS_PSW}"
                                         ssh_public_key = "${publicKey}"
+                                        region = "us-west-2"
                                     """
 
                                 sh '''
