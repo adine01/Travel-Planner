@@ -20,7 +20,6 @@ pipeline {
         DB_CREDS = credentials('db-credentials')
         JWT_SECRET = credentials('jwt-secret')
         DOCKER_REGISTRY = 'isuruamarasena'
-        SSH_KEY = credentials('ssh-key')
         AWS_DEFAULT_REGION    = 'us-west-2'
     }
 
@@ -60,37 +59,11 @@ pipeline {
                     steps {
                         script {
                             if (params.INFRASTRUCTURE_ACTION == 'apply') {
-                                withCredentials([sshUserPrivateKey(credentialsId: 'ssh-key', keyFileVariable: 'SSH_KEY')]) {
-                                    sh '''
-                                        # Create temporary directory for keys
-                                        mkdir -p keys
-                                        
-                                        # Copy private key and set permissions
-                                        cp "$SSH_KEY" keys/wanderwise-key
-                                        chmod 600 keys/wanderwise-key
-                                        
-                                        # Generate public key and save to file
-                                        ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
-                                        chmod 644 keys/wanderwise-key.pub
-                                        
-                                        # Check if key pair exists and import if needed
-                                        if ! aws ec2 describe-key-pairs --key-names wanderwise-key &>/dev/null; then
-                                            echo "Importing key pair to AWS..."
-                                            aws ec2 import-key-pair \
-                                                --key-name wanderwise-key \
-                                                --public-key-material fileb://keys/wanderwise-key.pub
-                                        else
-                                            echo "Key pair already exists in AWS"
-                                        fi
-                                    '''
-                                    
-                                    // Write terraform.tfvars
-                                    writeFile file: 'terraform.tfvars', text: """
-                                        db_username = "${DB_CREDS_USR}"
-                                        db_password = "${DB_CREDS_PSW}"
-                                        region = "us-west-2"
-                                    """
-                                }
+                                writeFile file: 'terraform.tfvars', text: """
+                                db_username = "${DB_CREDS_USR}"
+                                db_password = "${DB_CREDS_PSW}"
+                                region = "us-west-2"
+                                """
                             }
                             if (params.INFRASTRUCTURE_ACTION == 'destroy') {
                                 withCredentials([sshUserPrivateKey(credentialsId: 'ssh-key', keyFileVariable: 'SSH_KEY')]) {
@@ -320,24 +293,17 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Use SSH credentials properly
-                        withCredentials([sshUserPrivateKey(credentialsId: 'ssh-key', keyFileVariable: 'SSH_KEY_FILE')]) {
-                            // Create inventory file with proper key path
-                            writeFile file: 'inventory.ini', text: """[webservers]
-        ${env.EC2_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY_FILE} ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
-
-                            // Print inventory for debugging (mask the key)
-                            sh 'cat inventory.ini | sed "s|${SSH_KEY_FILE}|****|g"'
-                            
-                            // Run Ansible playbook
-                            ansiblePlaybook(
-                                playbook: 'playbook.yml',
-                                inventory: 'inventory.ini',
-                                credentialsId: 'ssh-key',
-                                extras: '-vvv',
-                                colorized: true
-                            )
-                        }
+                        // Update inventory file without SSH key
+                        writeFile file: 'inventory.ini', text: """[webservers]
+            ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
+                        
+                        // Run Ansible playbook
+                        ansiblePlaybook(
+                            playbook: 'playbook.yml',
+                            inventory: 'inventory.ini',
+                            extras: '-vvv',
+                            colorized: true
+                        )
                     } catch (Exception e) {
                         echo "Deployment failed: ${e.getMessage()}"
                         throw e

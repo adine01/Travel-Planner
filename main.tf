@@ -2,21 +2,6 @@ provider "aws" {
   region = "us-west-2"
 }
 
-resource "aws_key_pair" "wanderwise" {
-  key_name   = "wanderwise-key"
-  public_key = file("${path.module}/keys/wanderwise-key.pub")
-
-  lifecycle {
-    create_before_destroy = true
-    # Add this to prevent conflicts with existing key pair
-    ignore_changes = [public_key]
-  }
-}
-
-data "aws_key_pair" "wanderwise" {
-  key_name = "wanderwise-key"
-}
-
 # VPC with internet access
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
@@ -95,32 +80,16 @@ resource "aws_route_table_association" "secondary" {
   route_table_id = aws_route_table.main.id
 }
 
-# Security group for EC2
+# Update security group to allow all traffic
 resource "aws_security_group" "allow_web" {
   name   = "allow_web_traffic"
   vpc_id = aws_vpc.main.id
 
   ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "Application Port"
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
+    description = "All Traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -138,7 +107,7 @@ resource "aws_instance" "web" {
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.main.id
   vpc_security_group_ids = [aws_security_group.allow_web.id]
-  key_name = data.aws_key_pair.wanderwise.key_name
+  associate_public_ip_address = true
 
   tags = {
     Name = "WanderWise-WebServer"
