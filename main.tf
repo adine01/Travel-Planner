@@ -4,7 +4,7 @@ provider "aws" {
 
 resource "aws_key_pair" "wanderwise" {
   key_name   = "wanderwise-key"
-  public_key = file("${path.module}/wanderwise-key.pub")
+  public_key = file("${path.module}/keys/wanderwise-key.pub")
 }
 
 # VPC with internet access
