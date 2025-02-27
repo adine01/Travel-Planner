@@ -311,9 +311,22 @@ pipeline {
             }
             steps {
                 script {
+                    // Initialize terraform first
+                    sh 'terraform init'
+                    
+                    // Apply terraform variables
+                    writeFile file: 'terraform.tfvars', text: """
+                        db_username = "${DB_CREDS_USR}"
+                        db_password = "${DB_CREDS_PSW}"
+                        region = "us-west-2"
+                    """
+                    
                     // Get and verify EC2 IP
                     env.EC2_IP = sh(
-                        script: 'terraform output -raw instance_public_ip',
+                        script: '''
+                            terraform refresh
+                            terraform output -raw instance_public_ip
+                        ''',
                         returnStdout: true
                     ).trim()
                     
@@ -323,14 +336,22 @@ pipeline {
                     
                     echo "EC2 Instance IP: ${env.EC2_IP}"
                     
-                    // Test EC2 accessibility
+                    // Test EC2 accessibility with proper error handling
                     sh """
-                        timeout 60 bash -c 'until nc -zv ${env.EC2_IP} 22 2>/dev/null; do sleep 5; done'
+                        for i in \$(seq 1 12); do
+                            if nc -z -w 5 ${env.EC2_IP} 22; then
+                                echo "SSH port is accessible"
+                                exit 0
+                            fi
+                            echo "Waiting for SSH port to become accessible..."
+                            sleep 5
+                        done
+                        echo "Timed out waiting for SSH port"
+                        exit 1
                     """
                 }
             }
         }
-
         stage('Deploy') {
             when { 
                 expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
