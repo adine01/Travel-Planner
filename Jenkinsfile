@@ -224,6 +224,7 @@ pipeline {
                             ).trim()
                         }
 
+                        // Create .env file for application
                         writeFile file: '.env', text: """
                             DB_USER=${DB_CREDS_USR}
                             DB_PASSWORD=${DB_CREDS_PSW}
@@ -233,9 +234,10 @@ pipeline {
                             NODE_ENV=production
                         """
 
-                        writeFile file: '/var/lib/jenkins/workspace/travel-planner/inventory.ini', text: """
+                        // Update inventory file without SSH key reference
+                        writeFile file: 'inventory.ini', text: """
                         [webservers]
-                        ${env.EC2_IP} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY}
+                        ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no'
                         """
 
                     } catch (Exception e) {
