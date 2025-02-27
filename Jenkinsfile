@@ -244,15 +244,25 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Verify inventory file exists
+                        // Create inventory file
+                        writeFile file: 'inventory.ini', text: """[webservers]
+        ${env.EC2_IP ?: error('EC2_IP is not set')} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
+
+                        // Print inventory for debugging
                         sh 'cat inventory.ini'
                         
-                        // Run Ansible playbook with detailed output
+                        // Install required Ansible collections
+                        sh '''
+                            ansible-galaxy collection install community.docker
+                            ansible-galaxy collection install amazon.aws
+                        '''
+                        
+                        // Run Ansible playbook
                         ansiblePlaybook(
                             playbook: 'playbook.yml',
                             inventory: 'inventory.ini',
                             credentialsId: 'ssh-key',
-                            extras: '-v',  // Add verbose output
+                            extras: '-vvv',  // More verbose output for debugging
                             colorized: true
                         )
                     } catch (Exception e) {

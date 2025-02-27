@@ -1,28 +1,45 @@
+---
 - name: Configure WanderWise Web Server
   hosts: webservers
   become: yes
 
   tasks:
     - name: Install Docker
-      amazon-linux-extras:
+      yum:
         name: docker
         state: present
+      become: yes
 
     - name: Start Docker service
       service:
         name: docker
         state: started
         enabled: yes
+      become: yes
 
     - name: Add ec2-user to docker group
       user:
         name: ec2-user
         groups: docker
         append: yes
+      become: yes
 
-    - name: Copy Docker Compose file
+    - name: Create docker-compose.yml
       copy:
-        src: docker-compose.yml
+        content: |
+          version: '3'
+          services:
+            web:
+              image: isuruamarasena/wanderwise:latest
+              ports:
+                - "3000:3000"
+              environment:
+                - DB_USER=${DB_USER}
+                - DB_PASSWORD=${DB_PASSWORD}
+                - DB_NAME=${DB_NAME}
+                - DB_HOST=${DB_HOST}
+                - JWT_SECRET=${JWT_SECRET}
+                - NODE_ENV=production
         dest: /home/ec2-user/docker-compose.yml
 
     - name: Copy .env file
@@ -30,11 +47,12 @@
         src: .env
         dest: /home/ec2-user/.env
 
-    - name: Pull and run application
-      docker_compose:
-        project_src: /home/ec2-user
-        state: present
-
-    - name: Check Docker service status
-      service_facts:
-      register: docker_status
+    - name: Pull and run Docker container
+      docker_container:
+        name: wanderwise
+        image: isuruamarasena/wanderwise:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "3000:3000"
+        env_file: /home/ec2-user/.env
