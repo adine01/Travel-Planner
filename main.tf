@@ -5,6 +5,12 @@ provider "aws" {
 resource "aws_key_pair" "wanderwise" {
   key_name   = "wanderwise-key"
   public_key = file("${path.module}/keys/wanderwise-key.pub")
+
+  lifecycle {
+    create_before_destroy = true
+    # Add this to prevent conflicts with existing key pair
+    ignore_changes = [public_key]
+  }
 }
 
 # VPC with internet access
