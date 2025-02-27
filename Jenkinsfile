@@ -60,7 +60,20 @@ pipeline {
                     steps {
                         script {
                             if (params.INFRASTRUCTURE_ACTION == 'apply') {
-                                // Cleanup existing key pair
+                                // Create keys directory
+                                sh 'mkdir -p keys'
+
+                                // Write SSH keys
+                                withCredentials([sshUserPrivateKey(credentialsId: 'ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                                    sh '''
+                                        cp "$SSH_KEY" keys/wanderwise-key
+                                        chmod 600 keys/wanderwise-key
+                                        ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
+                                        chmod 644 keys/wanderwise-key.pub
+                                    '''
+                                }
+
+                                // Clean up existing key pair
                                 sh '''
                                     echo "Checking for existing key pair..."
                                     KEY_PAIR=$(aws ec2 describe-key-pairs --key-names wanderwise-key --query 'KeyPairs[*].KeyName' --output text || echo "")

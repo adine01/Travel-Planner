@@ -49,10 +49,11 @@ terraform.tfvars
 
 .aws/
 *.csv
-terraform.tfstate
-terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
 .terraform/
-.terraform.tfvars
+keys/
+*.tfvars
 
 
 # SSH Keys
