@@ -305,53 +305,6 @@ pipeline {
             }
         }
 
-        stage('Verify Infrastructure') {
-            when { 
-                expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
-            }
-            steps {
-                script {
-                    // Initialize terraform first
-                    sh 'terraform init'
-                    
-                    // Apply terraform variables
-                    writeFile file: 'terraform.tfvars', text: """
-                        db_username = "${DB_CREDS_USR}"
-                        db_password = "${DB_CREDS_PSW}"
-                        region = "us-west-2"
-                    """
-                    
-                    // Get and verify EC2 IP
-                    env.EC2_IP = sh(
-                        script: '''
-                            terraform refresh
-                            terraform output -raw instance_public_ip
-                        ''',
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (!env.EC2_IP) {
-                        error "EC2 IP address not found. Make sure the infrastructure is properly created."
-                    }
-                    
-                    echo "EC2 Instance IP: ${env.EC2_IP}"
-                    
-                    // Test EC2 accessibility with proper error handling
-                    sh """
-                        for i in \$(seq 1 12); do
-                            if nc -z -w 5 ${env.EC2_IP} 22; then
-                                echo "SSH port is accessible"
-                                exit 0
-                            fi
-                            echo "Waiting for SSH port to become accessible..."
-                            sleep 5
-                        done
-                        echo "Timed out waiting for SSH port"
-                        exit 1
-                    """
-                }
-            }
-        }
         stage('Deploy') {
             when { 
                 expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
@@ -359,45 +312,37 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Get EC2 IP if not already set
-                        if (!env.EC2_IP) {
-                            env.EC2_IP = sh(
-                                script: 'terraform output -raw instance_public_ip',
-                                returnStdout: true
-                            ).trim()
-                        }
-
-                        // Debug output
-                        sh "echo EC2 IP Address: ${env.EC2_IP}"
-
                         // Create workspace and copy files
                         sh '''
                             mkdir -p ansible-workspace
-                            cp playbook.yml inventory.ini .env ansible-workspace/
+                            cp playbook.yml .env ansible-workspace/
                         '''
 
-                        // Create inventory file with explicit IP
+                        // Create inventory file with correct settings
                         writeFile file: 'ansible-workspace/inventory.ini', text: """[webservers]
-        ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' ansible_become=yes ansible_become_method=sudo"""
+        ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_become=yes ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' ansible_become_method=sudo"""
 
-                        // Verify inventory file content
-                        sh 'cat ansible-workspace/inventory.ini'
-
-                        // Run Ansible in Docker with proper volumes
+                        // Run Ansible in Docker
                         docker.image(env.ANSIBLE_CONTAINER).inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
                             sh '''
                                 cd /ansible
                                 
                                 # Install required packages
                                 apk add --no-cache openssh-client sshpass
+
+                                # Debug: Show EC2 IP
+                                echo "Connecting to EC2 IP: ${EC2_IP}"
                                 
-                                # Debug SSH connection
+                                # Test SSH connection
                                 echo "Testing SSH connection..."
-                                ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${EC2_IP} 'echo "SSH test successful"' || echo "SSH test failed"
+                                ssh -v -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${EC2_IP} 'echo "SSH test successful"'
                                 
+                                # Run Ansible with debugging
                                 export ANSIBLE_HOST_KEY_CHECKING=False
+                                export ANSIBLE_SSH_ARGS='-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+                                export ANSIBLE_DEBUG=1
                                 
-                                # Run Ansible playbook with verbose output
+                                ansible all -i inventory.ini -m ping
                                 ansible-playbook -i inventory.ini playbook.yml -vvv
                             '''
                         }

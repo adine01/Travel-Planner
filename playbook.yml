@@ -4,10 +4,18 @@
   become: yes
   gather_facts: yes
   vars:
-    ansible_connection: ssh
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_connection: ssh
+    ansible_user: ec2-user
+    ansible_ssh_pass: ''  # Empty password since we're using passwordless
     ansible_become_method: sudo
-    ansible_python_interpreter: /usr/bin/python3
+    ansible_become_pass: ''  # No sudo password needed
+
+  pre_tasks:
+  - name: Wait for SSH to become available
+    wait_for_connection:
+      timeout: 300
+      delay: 10
 
   tasks:
     # - name: Install Docker

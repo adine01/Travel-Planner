@@ -119,27 +119,29 @@ resource "aws_instance" "web" {
   
   user_data = <<-EOF
               #!/bin/bash
-              # Allow password-less SSH access
-              sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config
-              sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+              # Update system
+              yum update -y
               
-              # Remove password requirement for sudo
-              echo "ec2-user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/ec2-user
+              # Configure SSH for passwordless access
+              sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+              
+              # Allow ec2-user sudo without password
+              echo "ec2-user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ec2-user
+              chmod 440 /etc/sudoers.d/ec2-user
               
               # Install required packages
-              yum update -y
               yum install -y python3 python3-pip docker
               
-              # Start and enable Docker
+              # Start Docker
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ec2-user
               
-              # Restart SSH service
+              # Restart SSH
               systemctl restart sshd
               EOF
-
+              
   tags = {
     Name = "WanderWise-WebServer"
   }
