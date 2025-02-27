@@ -1,15 +1,8 @@
 pipeline {
     agent any
 
-    options {
-        // Add cleanup options
-        disableConcurrentBuilds()
-        skipDefaultCheckout(false)
-    }
-
     tools {
-        nodejs 'Node20.13.1'  // Match your WSL Ubuntu version
-        git 'Default' 
+    nodejs 'Node20.13.1'  // Match your WSL Ubuntu version
     }
 
 
@@ -37,19 +30,8 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            stage('Checkout') {
-                steps {
-                    // Add clean checkout
-                    cleanWs()
-                    checkout([$class: 'GitSCM',
-                        branches: [[name: '*/main']],
-                        extensions: [[$class: 'CleanBeforeCheckout']],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/adine01/Travel-Planner.git',
-                            credentialsId: 'github-credentials'
-                        ]]
-                    ])
-                }
+            steps {
+                checkout scm
             }
         }
 
@@ -262,25 +244,15 @@ pipeline {
             steps {
                 script {
                     try {
-                        // Create inventory file
-                        writeFile file: 'inventory.ini', text: """[webservers]
-        ${env.EC2_IP ?: error('EC2_IP is not set')} ansible_user=ec2-user ansible_ssh_private_key_file=${SSH_KEY} ansible_ssh_common_args='-o StrictHostKeyChecking=no'"""
-
-                        // Print inventory for debugging
+                        // Verify inventory file exists
                         sh 'cat inventory.ini'
                         
-                        // Install required Ansible collections
-                        sh '''
-                            ansible-galaxy collection install community.docker
-                            ansible-galaxy collection install amazon.aws
-                        '''
-                        
-                        // Run Ansible playbook
+                        // Run Ansible playbook with detailed output
                         ansiblePlaybook(
                             playbook: 'playbook.yml',
                             inventory: 'inventory.ini',
                             credentialsId: 'ssh-key',
-                            extras: '-vvv',  // More verbose output for debugging
+                            extras: '-v',  // Add verbose output
                             colorized: true
                         )
                     } catch (Exception e) {
