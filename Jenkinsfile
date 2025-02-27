@@ -69,22 +69,22 @@ pipeline {
                                         cp "$SSH_KEY" keys/wanderwise-key
                                         chmod 600 keys/wanderwise-key
                                         
-                                        # Generate public key
-                                        PUBLIC_KEY=$(ssh-keygen -y -f keys/wanderwise-key)
+                                        # Generate public key and save to file
+                                        ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
+                                        chmod 644 keys/wanderwise-key.pub
                                         
-                                        # Import to AWS (if key doesn't exist)
+                                        # Check if key pair exists
                                         echo "Checking if key pair exists..."
                                         if ! aws ec2 describe-key-pairs --key-names wanderwise-key &>/dev/null; then
                                             echo "Importing key pair to AWS..."
+                                            # Base64 encode the public key
+                                            PUBLIC_KEY_B64=$(cat keys/wanderwise-key.pub | base64 -w 0)
                                             aws ec2 import-key-pair \
                                                 --key-name wanderwise-key \
-                                                --public-key-material "$PUBLIC_KEY"
+                                                --public-key-material "$PUBLIC_KEY_B64"
                                         else
                                             echo "Key pair already exists in AWS"
                                         fi
-                                        
-                                        # Save public key for Terraform
-                                        echo "$PUBLIC_KEY" > keys/wanderwise-key.pub
                                     '''
                                     
                                     // Get the public key content for Terraform
