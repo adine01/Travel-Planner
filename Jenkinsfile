@@ -318,29 +318,18 @@ pipeline {
                             cp playbook.yml inventory.ini .env ansible-workspace/
                         '''
 
-                        // Create inventory file with password authentication
+                        // Create inventory file without authentication
                         writeFile file: 'ansible-workspace/inventory.ini', text: """[webservers]
-        ${env.EC2_IP} ansible_user=ec2-user ansible_password=wanderwise123 ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_become=yes ansible_become_method=sudo"""
+        ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no -o PermitEmptyPasswords=yes' ansible_become=yes ansible_become_method=sudo"""
 
                         // Run Ansible in Docker with proper volumes
                         docker.image(env.ANSIBLE_CONTAINER).inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
                             sh '''
                                 cd /ansible
                                 export ANSIBLE_HOST_KEY_CHECKING=False
-                                export SSHPASS=wanderwise123
                                 
-                                # Install required packages
-                                apk add --no-cache sshpass openssh-client
-                                
-                                # Debug SSH connection
-                                echo "Testing SSH connection..."
-                                sshpass -p 'wanderwise123' ssh -o StrictHostKeyChecking=no ec2-user@${EC2_IP} 'echo "SSH connection successful"'
-                                
-                                # Run Ansible with password authentication
-                                ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook \
-                                    -i inventory.ini \
-                                    --extra-vars "ansible_password=wanderwise123" \
-                                    -vvv playbook.yml
+                                # Run Ansible without password
+                                ansible-playbook -i inventory.ini playbook.yml -vvv
                             '''
                         }
                     } catch (Exception e) {

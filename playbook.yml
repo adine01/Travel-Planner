@@ -5,9 +5,10 @@
   gather_facts: yes
   vars:
     ansible_connection: ssh
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o PermitEmptyPasswords=yes'
     ansible_become_method: sudo
     ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_pass: ''
 
   tasks:
     # - name: Install Docker

@@ -117,22 +117,27 @@ resource "aws_instance" "web" {
   vpc_security_group_ids = [aws_security_group.allow_web.id]
   associate_public_ip_address = true
   
-  # Add user data to set up password authentication
-    user_data = <<-EOF
+  user_data = <<-EOF
               #!/bin/bash
-              # Enable password authentication
+              # Allow password-less SSH access
               sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords yes/' /etc/ssh/sshd_config
+              sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
               
-              # Set password for ec2-user
-              echo 'ec2-user:wanderwise123' | chpasswd
-              
-              # Restart SSH service
-              systemctl restart sshd
+              # Remove password requirement for sudo
+              echo "ec2-user ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/ec2-user
               
               # Install required packages
               yum update -y
-              yum install -y python3 python3-pip
+              yum install -y python3 python3-pip docker
+              
+              # Start and enable Docker
+              systemctl start docker
+              systemctl enable docker
+              usermod -aG docker ec2-user
+              
+              # Restart SSH service
+              systemctl restart sshd
               EOF
 
   tags = {
