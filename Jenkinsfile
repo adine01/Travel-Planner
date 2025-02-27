@@ -305,6 +305,32 @@ pipeline {
             }
         }
 
+        stage('Verify Infrastructure') {
+            when { 
+                expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
+            }
+            steps {
+                script {
+                    // Get and verify EC2 IP
+                    env.EC2_IP = sh(
+                        script: 'terraform output -raw instance_public_ip',
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (!env.EC2_IP) {
+                        error "EC2 IP address not found. Make sure the infrastructure is properly created."
+                    }
+                    
+                    echo "EC2 Instance IP: ${env.EC2_IP}"
+                    
+                    // Test EC2 accessibility
+                    sh """
+                        timeout 60 bash -c 'until nc -zv ${env.EC2_IP} 22 2>/dev/null; do sleep 5; done'
+                    """
+                }
+            }
+        }
+
         stage('Deploy') {
             when { 
                 expression { params.INFRASTRUCTURE_ACTION != 'destroy' }
@@ -312,15 +338,29 @@ pipeline {
             steps {
                 script {
                     try {
+                        // Get EC2 IP if not already set
+                        if (!env.EC2_IP) {
+                            env.EC2_IP = sh(
+                                script: 'terraform output -raw instance_public_ip',
+                                returnStdout: true
+                            ).trim()
+                        }
+
+                        // Debug output
+                        sh "echo EC2 IP Address: ${env.EC2_IP}"
+
                         // Create workspace and copy files
                         sh '''
                             mkdir -p ansible-workspace
                             cp playbook.yml inventory.ini .env ansible-workspace/
                         '''
 
-                        // Create inventory file without authentication
+                        // Create inventory file with explicit IP
                         writeFile file: 'ansible-workspace/inventory.ini', text: """[webservers]
         ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' ansible_become=yes ansible_become_method=sudo"""
+
+                        // Verify inventory file content
+                        sh 'cat ansible-workspace/inventory.ini'
 
                         // Run Ansible in Docker with proper volumes
                         docker.image(env.ANSIBLE_CONTAINER).inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
@@ -330,9 +370,13 @@ pipeline {
                                 # Install required packages
                                 apk add --no-cache openssh-client sshpass
                                 
+                                # Debug SSH connection
+                                echo "Testing SSH connection..."
+                                ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${EC2_IP} 'echo "SSH test successful"' || echo "SSH test failed"
+                                
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 
-                                # Run Ansible playbook
+                                # Run Ansible playbook with verbose output
                                 ansible-playbook -i inventory.ini playbook.yml -vvv
                             '''
                         }
