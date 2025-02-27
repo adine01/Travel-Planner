@@ -69,28 +69,30 @@ pipeline {
                                         cp "$SSH_KEY" keys/wanderwise-key
                                         chmod 600 keys/wanderwise-key
                                         
-                                        # Generate public key and save content
-                                        PUBLIC_KEY=$(ssh-keygen -y -f keys/wanderwise-key)
+                                        # Generate public key and save to file
+                                        ssh-keygen -y -f keys/wanderwise-key > keys/wanderwise-key.pub
+                                        chmod 644 keys/wanderwise-key.pub
                                         
-                                        # Import to AWS
+                                        # Import to AWS (using base64 encoding)
                                         echo "Importing key pair to AWS..."
                                         aws ec2 delete-key-pair --key-name wanderwise-key || true
                                         aws ec2 import-key-pair \
                                             --key-name wanderwise-key \
-                                            --public-key-material "$PUBLIC_KEY"
+                                            --public-key-material fileb://keys/wanderwise-key.pub
                                     '''
                                     
                                     // Get the public key content for Terraform
                                     def publicKey = sh(
-                                        script: 'ssh-keygen -y -f keys/wanderwise-key',
+                                        script: 'cat keys/wanderwise-key.pub',
                                         returnStdout: true
                                     ).trim()
                                     
-                                    // Write terraform.tfvars with all variables
+                                    // Write terraform.tfvars with all required variables
                                     writeFile file: 'terraform.tfvars', text: """
                                         db_username = "${DB_CREDS_USR}"
                                         db_password = "${DB_CREDS_PSW}"
                                         ssh_public_key = "${publicKey}"
+                                        region = "us-west-2"
                                     """
                                 }
                             }
