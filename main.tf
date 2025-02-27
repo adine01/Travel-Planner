@@ -120,9 +120,17 @@ resource "aws_instance" "web" {
   # Add user data to set up password authentication
     user_data = <<-EOF
               #!/bin/bash
+              # Enable password authentication
               sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              systemctl restart sshd
+              sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              
+              # Set password for ec2-user
               echo 'ec2-user:wanderwise123' | chpasswd
+              
+              # Restart SSH service
+              systemctl restart sshd
+              
+              # Install required packages
               yum update -y
               yum install -y python3 python3-pip
               EOF
