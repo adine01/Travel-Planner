@@ -4,10 +4,9 @@
   become: yes
   gather_facts: yes
   vars:
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PermitEmptyPasswords=yes'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
     ansible_connection: ssh
     ansible_user: ec2-user
-    ansible_password: ""
     ansible_become: yes
     ansible_become_method: sudo
     ansible_become_pass: ""
@@ -20,11 +19,19 @@
       delay: 10
 
   tasks:
-    - name: Install Docker Python library
-      pip:
-        name: docker-py
-        state: present
-      become: yes
+    - name: Install system packages
+        apt:
+          name: 
+            - python3-pip 
+            - docker.io
+          state: present
+          update_cache: yes
+        become: yes
+      - name: Install Docker Python library
+        pip:
+          name: docker-py
+          state: present
+        become: yes
 
     - name: Start Docker service
       service:
