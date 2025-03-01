@@ -13,12 +13,23 @@
     ansible_host_key_checking: false
 
   pre_tasks:
-  - name: Wait for SSH to become available
-    wait_for_connection:
-      timeout: 300
-      delay: 10
+    - name: Wait for SSH to become available
+      wait_for_connection:
+        timeout: 300
+        delay: 10
 
   tasks:
+    - name: Create required directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: ec2-user
+        group: ec2-user
+      with_items:
+        - /home/ec2-user/.ansible/tmp
+        - /home/ec2-user/app
+
     - name: Install system packages
       apt:
         name: 
@@ -27,6 +38,7 @@
         state: present
         update_cache: yes
       become: yes
+
     - name: Install Docker Python library
       pip:
         name: docker-py
@@ -34,7 +46,7 @@
       become: yes
 
     - name: Start Docker service
-      service:
+      systemd:
         name: docker
         state: started
         enabled: yes
@@ -63,14 +75,27 @@
                 - DB_HOST=${DB_HOST}
                 - JWT_SECRET=${JWT_SECRET}
                 - NODE_ENV=production
-        dest: /home/ec2-user/docker-compose.yml
+              restart: always
+        dest: /home/ec2-user/app/docker-compose.yml
+        mode: '0644'
+        owner: ec2-user
+        group: ec2-user
 
     - name: Copy .env file
       copy:
         src: .env
-        dest: /home/ec2-user/.env
+        dest: /home/ec2-user/app/.env
+        mode: '0600'
+        owner: ec2-user
+        group: ec2-user
 
-    - name: Pull and run Docker container
+    - name: Pull Docker image
+      docker_image:
+        name: isuruamarasena/wanderwise:latest
+        source: pull
+        force_source: yes
+
+    - name: Run Docker container
       docker_container:
         name: wanderwise
         image: isuruamarasena/wanderwise:latest
@@ -78,4 +103,4 @@
         restart_policy: always
         ports:
           - "3000:3000"
-        env_file: /home/ec2-user/.env
+        env_file: /home/ec2-user/app/.env
