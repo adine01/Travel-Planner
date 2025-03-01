@@ -117,28 +117,38 @@ resource "aws_instance" "web" {
   vpc_security_group_ids = [aws_security_group.allow_web.id]
   associate_public_ip_address = true
   
-  user_data = <<-EOF
+user_data = <<-EOF
               #!/bin/bash
-              # Update system
-              yum update -y
+              # Update system and install packages
+              apt-get update
+              apt-get install -y python3 python3-pip docker.io openssh-server
               
-              # Configure SSH for passwordless access
-              sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+              # Configure SSH for completely open access (DANGEROUS!)
+              cat > /etc/ssh/sshd_config <<'EOL'
+              Port 22
+              PermitRootLogin yes
+              PubkeyAuthentication no
+              PasswordAuthentication yes
+              PermitEmptyPasswords yes
+              UsePAM no
+              ChallengeResponseAuthentication no
+              AuthenticationMethods none
+              EOL
               
-              # Allow ec2-user sudo without password
+              # Create ec2-user with no password
+              useradd -m -s /bin/bash ec2-user
+              passwd -d ec2-user
+              
+              # Give ec2-user ALL permissions without password
               echo "ec2-user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ec2-user
               chmod 440 /etc/sudoers.d/ec2-user
               
-              # Install required packages
-              yum install -y python3 python3-pip docker
-              
-              # Start Docker
+              # Configure Docker
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ec2-user
               
-              # Restart SSH
+              # Restart SSH with new configuration
               systemctl restart sshd
               EOF
               

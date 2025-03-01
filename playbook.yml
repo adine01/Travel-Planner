@@ -4,12 +4,14 @@
   become: yes
   gather_facts: yes
   vars:
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PermitEmptyPasswords=yes'
     ansible_connection: ssh
     ansible_user: ec2-user
-    ansible_ssh_pass: ''  # Empty password since we're using passwordless
+    ansible_password: ""
+    ansible_become: yes
     ansible_become_method: sudo
-    ansible_become_pass: ''  # No sudo password needed
+    ansible_become_pass: ""
+    ansible_host_key_checking: false
 
   pre_tasks:
   - name: Wait for SSH to become available
@@ -18,11 +20,6 @@
       delay: 10
 
   tasks:
-    # - name: Install Docker
-    #   yum:
-    #     name: docker
-    #     state: present
-    #   become: yes
     - name: Install Docker Python library
       pip:
         name: docker-py
