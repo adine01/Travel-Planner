@@ -21,8 +21,9 @@ pipeline {
         JWT_SECRET = credentials('jwt-secret')
         DOCKER_REGISTRY = 'isuruamarasena'
         AWS_DEFAULT_REGION    = 'us-west-2'
-        ANSIBLE_CONTAINER = 'cytopia/ansible:latest'
+        ANSIBLE_CONTAINER = 'willhallonline/ansible:latest'
         DOCKER_HOST = 'unix:///var/run/docker.sock'
+        TF_STATE_DIR = '/var/lib/jenkins/terraform-states/travel-planner'
     }
 
     parameters {
@@ -413,13 +414,19 @@ pipeline {
                         writeFile file: 'ansible-workspace/inventory.ini', text: """[webservers]
         ${env.EC2_IP} ansible_user=ec2-user ansible_connection=ssh ansible_become=yes ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null' ansible_become_method=sudo"""
 
-                        // Run Ansible in Docker
-                        docker.image(env.ANSIBLE_CONTAINER).inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
+                        // Run Ansible in Docker with a more reliable image and better error handling
+                        docker.image('willhallonline/ansible:latest').inside('-u root -v ${WORKSPACE}/ansible-workspace:/ansible:rw') {
                             sh '''
                                 cd /ansible
                                 
-                                # Install required packages
-                                apk add --no-cache openssh-client sshpass
+                                # Verify packages are available
+                                if ! command -v ssh &> /dev/null; then
+                                    echo "Installing SSH client..."
+                                    apt-get update && apt-get install -y openssh-client sshpass || {
+                                        echo "Failed to install packages with apt-get, trying with apk..."
+                                        apk update && apk add --no-cache openssh-client sshpass
+                                    }
+                                fi
 
                                 # Debug: Show EC2 IP
                                 echo "Connecting to EC2 IP: ${EC2_IP}"
