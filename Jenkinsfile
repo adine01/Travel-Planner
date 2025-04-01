@@ -256,7 +256,30 @@ pipeline {
                                 script: 'terraform output -raw rds_endpoint',
                                 returnStdout: true
                             ).trim()
+                        } else if (params.INFRASTRUCTURE_ACTION == 'none') {
+                            // For 'none' option, try to get EC2_IP from terraform output
+                            // If it fails, the infrastructure might not exist yet
+                            try {
+                                env.EC2_IP = sh(
+                                    script: 'terraform output -raw instance_public_ip',
+                                    returnStdout: true
+                                ).trim()
+                                
+                                if (env.EC2_IP == null || env.EC2_IP.trim() == '') {
+                                    error "EC2 instance IP not found. Please run with 'apply' option first to create infrastructure."
+                                }
+                                
+                                env.DB_HOST = sh(
+                                    script: 'terraform output -raw rds_endpoint',
+                                    returnStdout: true
+                                ).trim()
+                            } catch (Exception e) {
+                                error "Failed to get infrastructure details: ${e.getMessage()}. Please run with 'apply' option first."
+                            }
                         }
+
+                        echo "Using EC2 IP: ${env.EC2_IP}"
+                        echo "Using DB Host: ${env.DB_HOST ?: 'localhost'}"
 
                         // Create .env file for application
                         writeFile file: '.env', text: """
