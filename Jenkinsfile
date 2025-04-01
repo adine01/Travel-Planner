@@ -94,36 +94,11 @@ pipeline {
                                         region = "us-west-2"
                                     """
 
-                                sh '''
-                                    # Clean up RDS instances first
-                                    echo "Checking for RDS instances..."
-                                    RDS_INSTANCES=$(aws rds describe-db-instances --query 'DBInstances[?DBInstanceIdentifier==`wanderwise-db`].DBInstanceIdentifier' --output text)
-                                    if [ ! -z "$RDS_INSTANCES" ]; then
-                                        echo "Deleting RDS instance: $RDS_INSTANCES"
-                                        aws rds delete-db-instance --db-instance-identifier wanderwise-db --skip-final-snapshot --delete-automated-backups
-                                        echo "Waiting for RDS instance to be deleted..."
-                                        aws rds wait db-instance-deleted --db-instance-identifier wanderwise-db
-                                    fi
-
-                                    # Clean up DB subnet groups
-                                    echo "Checking for DB subnet groups..."
-                                    aws rds delete-db-subnet-group --db-subnet-group-name wanderwise-db-subnet-group || true
-                                    
-                                    # Clean up VPCs and associated resources
-                                    echo "Checking for existing VPCs..."
-                                    VPCS=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=wanderwise-vpc" --query 'Vpcs[*].VpcId' --output text)
-                                    for VPC in $VPCS; do
-                                        echo "Cleaning up VPC: $VPC"
-                                        
-                                        # First, disassociate and release Elastic IPs
-                                        EIPS=$(aws ec2 describe-addresses --filters "Name=domain,Values=vpc" --query 'Addresses[*].AllocationId' --output text)
-                                        for EIP in $EIPS; do
-                                            echo "Releasing Elastic IP: $EIP"
-                                            aws ec2 release-address --allocation-id $EIP || true
-                                        done
-                                        
-                                        # Terminate EC2 instances
-                                        INSTANCES=$(aws ec2 describe-instances --filters "Name=vpc-id,Values=$VPC" --query 'Reservations[].Instances[].InstanceId' --output text)
+                                    // Improved AWS resource cleanup script with proper dependency handling
+                                    sh '''
+                                        # Clean up EC2 instances first
+                                        echo "Checking for EC2 instances..."
+                                        INSTANCES=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=WanderWise-WebServer" --query 'Reservations[].Instances[].InstanceId' --output text)
                                         if [ ! -z "$INSTANCES" ]; then
                                             echo "Terminating EC2 instances: $INSTANCES"
                                             aws ec2 terminate-instances --instance-ids $INSTANCES || true
@@ -131,41 +106,91 @@ pipeline {
                                             aws ec2 wait instance-terminated --instance-ids $INSTANCES
                                         fi
                                         
-                                        # Detach and delete Internet Gateways
-                                        IGW=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC" --query 'InternetGateways[*].InternetGatewayId' --output text)
-                                        if [ ! -z "$IGW" ]; then
-                                            echo "Detaching and deleting Internet Gateway: $IGW"
-                                            aws ec2 detach-internet-gateway --internet-gateway-id $IGW --vpc-id $VPC || true
-                                            aws ec2 delete-internet-gateway --internet-gateway-id $IGW || true
+                                        # Clean up RDS instances
+                                        echo "Checking for RDS instances..."
+                                        RDS_INSTANCES=$(aws rds describe-db-instances --query 'DBInstances[?DBInstanceIdentifier==`wanderwise-db`].DBInstanceIdentifier' --output text)
+                                        if [ ! -z "$RDS_INSTANCES" ]; then
+                                            echo "Deleting RDS instance: $RDS_INSTANCES"
+                                            aws rds delete-db-instance --db-instance-identifier wanderwise-db --skip-final-snapshot --delete-automated-backups
+                                            echo "Waiting for RDS instance to be deleted..."
+                                            aws rds wait db-instance-deleted --db-instance-identifier wanderwise-db
                                         fi
+
+                                        # Clean up DB subnet groups
+                                        echo "Checking for DB subnet groups..."
+                                        aws rds delete-db-subnet-group --db-subnet-group-name wanderwise-db-subnet-group || true
                                         
-                                        # Delete Subnets
-                                        SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC" --query 'Subnets[*].SubnetId' --output text)
-                                        for SUBNET in $SUBNETS; do
-                                            echo "Deleting subnet: $SUBNET"
-                                            aws ec2 delete-subnet --subnet-id $SUBNET || true
+                                        # Clean up Network Interfaces
+                                        echo "Cleaning up network interfaces..."
+                                        VPCS=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=wanderwise-vpc" --query 'Vpcs[*].VpcId' --output text)
+                                        for VPC in $VPCS; do
+                                            ENIS=$(aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=$VPC" --query 'NetworkInterfaces[*].NetworkInterfaceId' --output text)
+                                            for ENI in $ENIS; do
+                                                echo "Detaching and deleting network interface: $ENI"
+                                                aws ec2 detach-network-interface --attachment-id $(aws ec2 describe-network-interfaces --network-interface-ids $ENI --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text) --force || true
+                                                sleep 5
+                                                aws ec2 delete-network-interface --network-interface-id $ENI || true
+                                            done
                                         done
                                         
-                                        # Delete Route Tables (except main)
-                                        RTS=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC" --query 'RouteTables[?Associations[0].Main!=`true`].RouteTableId' --output text)
-                                        for RT in $RTS; do
-                                            echo "Deleting route table: $RT"
-                                            aws ec2 delete-route-table --route-table-id $RT || true
+                                        # Disassociate and release Elastic IPs
+                                        EIPS=$(aws ec2 describe-addresses --filters "Name=domain,Values=vpc" --query 'Addresses[*].AllocationId' --output text)
+                                        for EIP in $EIPS; do
+                                            echo "Releasing Elastic IP: $EIP"
+                                            aws ec2 release-address --allocation-id $EIP || true
+                                        done
+                                        
+                                        # Detach and delete Internet Gateways
+                                        for VPC in $VPCS; do
+                                            IGW=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC" --query 'InternetGateways[*].InternetGatewayId' --output text)
+                                            if [ ! -z "$IGW" ]; then
+                                                echo "Detaching and deleting Internet Gateway: $IGW"
+                                                aws ec2 detach-internet-gateway --internet-gateway-id $IGW --vpc-id $VPC || true
+                                                aws ec2 delete-internet-gateway --internet-gateway-id $IGW || true
+                                            fi
                                         done
                                         
                                         # Delete Security Groups (skip default)
-                                        SGS=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text)
-                                        for SG in $SGS; do
-                                            echo "Deleting security group: $SG"
-                                            aws ec2 delete-security-group --group-id $SG || true
+                                        for VPC in $VPCS; do
+                                            SGS=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text)
+                                            for SG in $SGS; do
+                                                echo "Deleting security group: $SG"
+                                                aws ec2 delete-security-group --group-id $SG || true
+                                            done
                                         done
                                         
-                                        echo "Deleting VPC: $VPC"
-                                        aws ec2 delete-vpc --vpc-id $VPC || true
-                                    done
-                                    
-                                    echo "Waiting for resources to be cleaned up..."
-                                    sleep 60
+                                        # Delete Route Tables (except main)
+                                        for VPC in $VPCS; do
+                                            RTS=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC" --query 'RouteTables[?Associations[0].Main!=`true`].RouteTableId' --output text)
+                                            for RT in $RTS; do
+                                                # First remove associations
+                                                ASSOCS=$(aws ec2 describe-route-tables --route-table-id $RT --query 'RouteTables[0].Associations[?!Main].RouteTableAssociationId' --output text)
+                                                for ASSOC in $ASSOCS; do
+                                                    echo "Disassociating route table: $ASSOC"
+                                                    aws ec2 disassociate-route-table --association-id $ASSOC || true
+                                                done
+                                                echo "Deleting route table: $RT"
+                                                aws ec2 delete-route-table --route-table-id $RT || true
+                                            done
+                                        done
+                                        
+                                        # Delete Subnets
+                                        for VPC in $VPCS; do
+                                            SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC" --query 'Subnets[*].SubnetId' --output text)
+                                            for SUBNET in $SUBNETS; do
+                                                echo "Deleting subnet: $SUBNET"
+                                                aws ec2 delete-subnet --subnet-id $SUBNET || true
+                                            done
+                                        done
+                                        
+                                        # Delete VPCs
+                                        for VPC in $VPCS; do
+                                            echo "Deleting VPC: $VPC"
+                                            aws ec2 delete-vpc --vpc-id $VPC || true
+                                        done
+                                        
+                                        echo "Waiting for resources to be cleaned up..."
+                                        sleep 30
                                     '''
                                 }
                             }
@@ -203,7 +228,14 @@ pipeline {
                     }
                     steps {
                         input "Execute ${params.INFRASTRUCTURE_ACTION} action?"
-                        sh 'terraform apply -auto-approve tfplan'
+                        script {
+                            if (params.INFRASTRUCTURE_ACTION == 'destroy') {
+                                // Use terraform destroy directly instead of plan+apply
+                                sh 'terraform destroy -auto-approve'
+                            } else {
+                                sh 'terraform apply -auto-approve tfplan'
+                            }
+                        }
                     }
                 }
             }
@@ -343,7 +375,7 @@ pipeline {
                                 export ANSIBLE_DEBUG=1
                                 
                                 ansible all -i inventory.ini -m ping
-                                ansible-playbook -i inventory.ini playbook.yml -vvv
+                                ansible-playbook -i inventory.ini    playbook.yml -vvv
                             '''
                         }
                     } catch (Exception e) {
