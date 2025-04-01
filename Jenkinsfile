@@ -246,8 +246,17 @@ pipeline {
             steps {
                 script {
                     try {
+                        // Create state directory if it doesn't exist
+                        sh "mkdir -p ${env.TF_STATE_DIR}"
+                        
+                        // Copy state file from persistent location if it exists
+                        sh "test -f ${env.TF_STATE_DIR}/terraform.tfstate && cp ${env.TF_STATE_DIR}/terraform.tfstate . || echo 'No state file found in persistent location'"
+                        
                         // Get infrastructure outputs if they exist
                         if (params.INFRASTRUCTURE_ACTION == 'apply') {
+                            // After successful apply, save state file to persistent location
+                            sh "cp terraform.tfstate ${env.TF_STATE_DIR}/ || echo 'No state file to copy'"
+                            
                             env.EC2_IP = sh(
                                 script: 'terraform output -raw instance_public_ip || echo ""',
                                 returnStdout: true
