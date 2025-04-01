@@ -249,44 +249,63 @@ pipeline {
                         // Get infrastructure outputs if they exist
                         if (params.INFRASTRUCTURE_ACTION == 'apply') {
                             env.EC2_IP = sh(
-                                script: 'terraform output -raw instance_public_ip',
+                                script: 'terraform output -raw instance_public_ip || echo ""',
                                 returnStdout: true
                             ).trim()
                             env.DB_HOST = sh(
-                                script: 'terraform output -raw rds_endpoint',
+                                script: 'terraform output -raw rds_endpoint || echo ""',
                                 returnStdout: true
                             ).trim()
                         } else if (params.INFRASTRUCTURE_ACTION == 'none') {
-                            // For 'none' option, try to get EC2_IP from terraform output
-                            // If it fails, the infrastructure might not exist yet
-                            try {
-                                env.EC2_IP = sh(
-                                    script: 'terraform output -raw instance_public_ip',
-                                    returnStdout: true
-                                ).trim()
-                                
-                                if (env.EC2_IP == null || env.EC2_IP.trim() == '') {
-                                    error "EC2 instance IP not found. Please run with 'apply' option first to create infrastructure."
-                                }
-                                
-                                env.DB_HOST = sh(
-                                    script: 'terraform output -raw rds_endpoint',
-                                    returnStdout: true
-                                ).trim()
-                            } catch (Exception e) {
-                                error "Failed to get infrastructure details: ${e.getMessage()}. Please run with 'apply' option first."
+                            // For 'none' option, check if terraform state exists first
+                            def stateExists = sh(
+                                script: 'test -f terraform.tfstate && echo "true" || echo "false"',
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (stateExists == 'false') {
+                                error "Terraform state file not found. Please run with 'apply' option first to create infrastructure."
+                            }
+                            
+                            // Check if outputs exist in the state file
+                            def outputExists = sh(
+                                script: 'terraform output -json > /dev/null 2>&1 && echo "true" || echo "false"',
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (outputExists == 'false') {
+                                error "No terraform outputs found. Please run with 'apply' option first to create infrastructure."
+                            }
+                            
+                            // Now safely get the outputs
+                            env.EC2_IP = sh(
+                                script: 'terraform output -raw instance_public_ip || echo ""',
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (env.EC2_IP == null || env.EC2_IP.trim() == '') {
+                                error "EC2 instance IP not found in terraform outputs. Please run with 'apply' option first."
+                            }
+                            
+                            env.DB_HOST = sh(
+                                script: 'terraform output -raw rds_endpoint || echo ""',
+                                returnStdout: true
+                            ).trim()
+                            
+                            if (env.DB_HOST == null || env.DB_HOST.trim() == '') {
+                                error "RDS endpoint not found in terraform outputs. Please run with 'apply' option first."
                             }
                         }
 
                         echo "Using EC2 IP: ${env.EC2_IP}"
-                        echo "Using DB Host: ${env.DB_HOST ?: 'localhost'}"
+                        echo "Using DB Host: ${env.DB_HOST}"
 
                         // Create .env file for application
                         writeFile file: '.env', text: """
                             DB_USER=${DB_CREDS_USR}
                             DB_PASSWORD=${DB_CREDS_PSW}
                             DB_NAME=wanderwise
-                            DB_HOST=${env.DB_HOST ?: 'localhost'}
+                            DB_HOST=${env.DB_HOST}
                             JWT_SECRET=${JWT_SECRET}
                             NODE_ENV=production
                         """
@@ -368,6 +387,13 @@ pipeline {
             steps {
                 script {
                     try {
+                        // Verify EC2_IP is set and valid
+                        if (env.EC2_IP == null || env.EC2_IP.trim() == '' || env.EC2_IP.contains('Warning')) {
+                            error "EC2 instance IP is not set or invalid: '${env.EC2_IP}'. Cannot proceed with deployment."
+                        }
+                        
+                        echo "Deploying to EC2 instance at IP: ${env.EC2_IP}"
+                        
                         // Create workspace and copy files
                         sh '''
                             mkdir -p ansible-workspace
@@ -399,7 +425,7 @@ pipeline {
                                 export ANSIBLE_DEBUG=1
                                 
                                 ansible all -i inventory.ini -m ping
-                                ansible-playbook -i inventory.ini    playbook.yml -vvv
+                                ansible-playbook -i inventory.ini playbook.yml -vvv
                             '''
                         }
                     } catch (Exception e) {
