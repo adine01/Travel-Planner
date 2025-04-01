@@ -297,6 +297,7 @@ pipeline {
         }
 
         stage('Docker Build & Push') {
+            when { expression { params.INFRASTRUCTURE_ACTION != 'destroy' } }
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
